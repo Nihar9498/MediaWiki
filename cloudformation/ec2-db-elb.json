@@ -1,0 +1,196 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+"Parameters" : {
+  "DBPwd" : {
+    "NoEcho" : "true",
+    "Description" : "The database admin account password",
+    "Type" : "String",
+    "MinLength" : "1",
+    "MaxLength" : "41",
+    "AllowedPattern" : "^[a-zA-Z0-9]*$"
+  },
+   "InstanceHostname1"      : {
+            "Description" : "Select your you instance Hostname",
+            "Type"        : "String",
+            "Default"     : "ec2.2.mediawiki.com"
+        },
+        "InstanceDomainName"    : {
+            "Description" : "Select your instance DomainName",
+            "Type"        : "String",
+            "Default"     : "redhat1.org"
+        },
+	 "InstanceHostname2"      : {
+            "Description" : "Select your you instance Hostname",
+            "Type"        : "String",
+            "Default"     : "ec2.2.mediawiki.com"
+        }
+      
+}
+	"Resources" : {
+	 "Ec2Instance1" : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                "ImageId": "ami-05220ffa0e7fce3d1",
+				"InstanceType" : "t2.micro",
+				"KeyName" : "media_key",
+				"SubnetId" : "subnet-8fa4ddf5",
+				"SecurityGroupIds" : ["sg-045400334b12ff0eb"],
+				"AvailabilityZone" : "us-east-2b",
+				"UserData"     : {
+                    "Fn::Base64" : {
+                        "Fn::Join" : [
+                            "",
+                            [
+                                "#!/bin/bash\n",
+                                "# Replace this with your domain\n",
+                                "DOMAIN=",
+                                {
+                                    "Ref" : "InstanceDomainName"
+                                },
+                                "\n",
+                                "HOSTNAME=",
+                                {
+                                    "Ref" : "InstanceHostname1"
+                                },
+                                "\n",
+                                "IPV4=/usr/bin/curl -s http://169.254.169.254/latest/meta-data/public-ipv4",
+                                "\n",
+                                "# Set the host name\n",
+                                "hostname",
+                                " ",
+                                {
+                                    "Ref" : "InstanceHostname1"
+                                },
+                                "\n",
+                                "echo",
+                                " ",
+                                {
+                                    "Ref" : "InstanceHostname1"
+                                },
+                                "> /etc/hostname\n",
+                                "# Add fqdn to hosts file\n",
+                                "echo 'HOSTNAME=",
+                                {
+                                    "Ref" : "InstanceHostname1"
+                                },
+                                "'",
+                                ">> /etc/sysconfig/network\n",
+                                "echo 'preserve_hostname: true' >> /etc/cloud/cloud.cfg\n",
+                                "cat<<EOF > /etc/hosts\n",
+                                "127.0.0.1 localhost\n",
+                                "$IPV4 $HOSTNAME.$DOMAIN $HOSTNAME\n",
+                                "EOF"
+                            ]
+                        ]
+                    }
+                }
+				
+				
+            }
+      
+        },
+		"Ec2Instance2" : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                "ImageId": "ami-05220ffa0e7fce3d1",
+				"InstanceType" : "t2.micro",
+				"KeyName" : "media_key",
+				"SubnetId" : "subnet-6f1c1f07",
+				"SecurityGroupIds" : ["sg-045400334b12ff0eb"],
+				"AvailabilityZone" : "us-east-2a",
+				"UserData"     : {
+                    "Fn::Base64" : {
+                        "Fn::Join" : [
+                            "",
+                            [
+                                "#!/bin/bash\n",
+                                "# Replace this with your domain\n",
+                                "DOMAIN=",
+                                {
+                                    "Ref" : "InstanceDomainName"
+                                },
+                                "\n",
+                                "HOSTNAME=",
+                                {
+                                    "Ref" : "InstanceHostname2"
+                                },
+                                "\n",
+                                "IPV4=/usr/bin/curl -s http://169.254.169.254/latest/meta-data/public-ipv4",
+                                "\n",
+                                "# Set the host name\n",
+                                "hostname",
+                                " ",
+                                {
+                                    "Ref" : "InstanceHostname2"
+                                },
+                                "\n",
+                                "echo",
+                                " ",
+                                {
+                                    "Ref" : "InstanceHostname2"
+                                },
+                                "> /etc/hostname\n",
+                                "# Add fqdn to hosts file\n",
+                                "echo 'HOSTNAME=",
+                                {
+                                    "Ref" : "InstanceHostname2"
+                                },
+                                "'",
+                                ">> /etc/sysconfig/network\n",
+                                "echo 'preserve_hostname: true' >> /etc/cloud/cloud.cfg\n",
+                                "cat<<EOF > /etc/hosts\n",
+                                "127.0.0.1 localhost\n",
+                                "$IPV4 $HOSTNAME.$DOMAIN $HOSTNAME\n",
+                                "EOF"
+                            ]
+                        ]
+                    }
+                }
+				
+				
+            }
+		},
+			
+		"MediaDB" : {
+            "Type" : "AWS::RDS::DBInstance",
+            "Properties" : {
+               "AllocatedStorage" : "5",
+               "DBInstanceClass" : "db.t1.micro",
+               "Engine" : "MySQL",
+               "EngineVersion" : "5.5",
+               "MasterUsername" : "wiki",
+               "MasterUserPassword" : { "Ref" : "DBPwd" },
+			   "AvailabilityZone" : "us-east-2c"
+            }
+        },
+		
+		"MediaELB" : {
+			"Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+			"Properties" : {
+			"Instances" : [
+				{ "Ref" : "Ec2Instance1" },
+				{ "Ref" : "Ec2Instance2" }
+						],
+			"CrossZone" : true,
+			"SecurityGroups" : [ "sg-045400334b12ff0eb" ],
+			"Subnets" : [ "subnet-8fa4ddf5", "subnet-6f1c1f07" ],
+			"Listeners" : [ {
+				"LoadBalancerPort" : "80",
+				"InstancePort" : "80",
+				"Protocol" : "HTTP"
+							} ],
+
+			"HealthCheck" : {
+				"Target" : "HTTP:80/",
+				"HealthyThreshold" : "3",
+				"UnhealthyThreshold" : "5",
+				"Interval" : "30",
+				"Timeout" : "5"
+        }
+    }
+}
+		
+      
+        }
+	}
+

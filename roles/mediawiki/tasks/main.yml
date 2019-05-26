@@ -1,0 +1,76 @@
+---
+- name: Install dependencies
+  yum: name={{ item }} state=present
+  with_items:
+    - httpd
+    - mariadb
+    - php
+    - php-pear
+    - php-xml
+    - php-mysql
+    - php-intl
+    - php-gd
+    - php-mbstring
+    - ImageMagick-perl
+    - wget
+
+- name: Download MediaWiki
+  get_url:
+    url: https://releases.wikimedia.org/mediawiki/1.32/mediawiki-1.32.1.tar.gz
+    dest: /home/"{{ wiki.user }}"
+- name: Download Signature
+  get_url:
+    url: https://releases.wikimedia.org/mediawiki/1.32/mediawiki-1.32.1.tar.gz.sig
+    dest: /home/"{{ wiki.user }}"
+
+- name: Unarchive MediaWiki
+  unarchive:
+    src: /home/"{{ wiki.user }}"/mediawiki-1.32.1.tar.gz
+    dest: /home/"{{ wiki.user }}"/mediawiki
+    owner: "{{ wiki.user }}"
+    group: "{{ wiki.user }}"
+
+- name: Moving MediaWiki to web directory
+  command: creates={{ wiki.install_path }} mv /home/"{{ wiki.user }}"/mediawiki {{ wiki.install_path }}
+
+- name: Setting up /wiki endpoint and securing wiki from IP address scanning
+  template:
+    src: wiki.conf.j2
+    dest: /etc/httpd/conf.d/wiki.conf
+    owner: "{{ wiki.user }}"
+    group: "{{ wiki.user }}"
+    mode: 0664
+
+- name: Configuring MediaWiki
+  template:
+    src: LocalSettings.php.j2
+    dest: "{{ wiki.install_path }}/LocalSettings.php"
+    owner: "{{ wiki.user }}"
+    group: "{{ wiki.user }}"
+    mode: 0644
+
+
+- name: Updating permissions on MediaWiki installation parent directory
+  file:
+    path: "{{ wiki.install_path }}/.."
+    state: directory
+    owner: "{{ wiki.user }}"
+    group: "{{ wiki.user }}"
+    mode: 0775
+
+- name: Updating permissions on MediaWiki installation
+  file:
+    path: "{{ wiki.install_path }}"
+    state: directory
+    recurse: yes
+    owner: "{{ wiki.user }}"
+    group: "{{ wiki.user }}"
+    mode: 0775
+
+- name: Restart service httpd, in all cases
+  service:
+    name: httpd
+    state: restarted
+
+- selinux:
+    state: disabled
